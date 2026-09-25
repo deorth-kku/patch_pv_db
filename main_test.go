@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,8 +22,11 @@ func TestUpToDate(t *testing.T) {
 		t.Error("upToDate must be false when the output file does not exist")
 	}
 
-	data := pvdb.BuildHeader("1", stamps)
-	if err := os.WriteFile(out, data, 0o644); err != nil {
+	var buf bytes.Buffer
+	if err := pvdb.BuildHeader(&buf, "1", stamps); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(out, buf.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

@@ -9,7 +9,7 @@
 package main
 
 import (
-	"bytes"
+	"bufio"
 	"fmt"
 	"log"
 	"os"
@@ -91,19 +91,43 @@ func run(game, out, date, version string, verbose bool) (summary, error) {
 	patched := pvdb.ApplyPatches(db, patches)
 	s.patched = len(patched)
 
-	data, rendered := pvdb.Render(db, sourceCount, patched, date)
-	s.rendered = rendered
-
-	var outData bytes.Buffer
-	outData.Write(pvdb.BuildHeader(version, stamps))
-	outData.Write(data)
-
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		return s, fmt.Errorf("creating output directory: %w", err)
 	}
-	if err := os.WriteFile(out, outData.Bytes(), 0o644); err != nil {
+	// Write to a temp file in the same directory, then atomically move it
+	// over out. If anything fails, the temp file is removed and the
+	// existing out (old version) is left untouched.
+	tmp, err := os.CreateTemp(filepath.Dir(out), filepath.Base(out)+".tmp-*")
+	if err != nil {
+		return s, fmt.Errorf("creating temp output: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		if tmpName != "" {
+			os.Remove(tmpName)
+		}
+	}()
+
+	w := bufio.NewWriter(tmp)
+	if err := pvdb.BuildHeader(w, version, stamps); err != nil {
+		tmp.Close()
 		return s, fmt.Errorf("writing output: %w", err)
 	}
+	if s.rendered, err = pvdb.Render(w, db, sourceCount, patched, date); err != nil {
+		tmp.Close()
+		return s, fmt.Errorf("writing output: %w", err)
+	}
+	if err := w.Flush(); err != nil {
+		tmp.Close()
+		return s, fmt.Errorf("writing output: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return s, fmt.Errorf("writing output: %w", err)
+	}
+	if err := os.Rename(tmpName, out); err != nil {
+		return s, fmt.Errorf("writing output: %w", err)
+	}
+	tmpName = ""
 	if verbose {
 		for id := range patched {
 			log.Printf("patched: %s", id)

@@ -20,17 +20,21 @@ type SourceStamp struct {
 	Mtime string
 }
 
-// BuildHeader renders the comment header of a generated file: the mod
+// BuildHeader writes the comment header of a generated file to w: the mod
 // version followed by one line per source file, in input order, then a
-// blank line separating the header from the pv entries.
-func BuildHeader(version string, stamps []SourceStamp) []byte {
-	var buf strings.Builder
-	fmt.Fprintf(&buf, "%sversion=%s\r\n", headerPrefix, version)
-	for _, s := range stamps {
-		fmt.Fprintf(&buf, "%ssource %s %s\r\n", headerPrefix, s.Path, s.Mtime)
+// blank line separating the header from the pv entries. It returns the
+// first write error.
+func BuildHeader(w io.Writer, version string, stamps []SourceStamp) error {
+	if _, err := fmt.Fprintf(w, "%sversion=%s\r\n", headerPrefix, version); err != nil {
+		return err
 	}
-	buf.WriteString("\r\n")
-	return []byte(buf.String())
+	for _, s := range stamps {
+		if _, err := fmt.Fprintf(w, "%ssource %s %s\r\n", headerPrefix, s.Path, s.Mtime); err != nil {
+			return err
+		}
+	}
+	_, err := fmt.Fprint(w, "\r\n")
+	return err
 }
 
 // ParseHeader extracts the version and the ordered source stamps from a

@@ -1,6 +1,7 @@
 package pvdb
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,7 +16,11 @@ func TestBuildHeader(t *testing.T) {
 		"# patch_pv_db source C:\\game\\mods\\a\\rom\\mod_pv_db.txt 2025-09-25T12:00:00.1234567+08:00\r\n" +
 		"# patch_pv_db source C:\\game\\mods\\b\\rom\\patch_pv_db.txt 2025-09-25T12:00:01+08:00\r\n" +
 		"\r\n"
-	if got := string(BuildHeader("1.2.3", stamps)); got != want {
+	var buf bytes.Buffer
+	if err := BuildHeader(&buf, "1.2.3", stamps); err != nil {
+		t.Fatal(err)
+	}
+	if got := buf.String(); got != want {
 		t.Errorf("BuildHeader = %q, want %q", got, want)
 	}
 }
@@ -26,8 +31,11 @@ func TestParseHeaderRoundTrip(t *testing.T) {
 		{Path: `C:\game\mods b\rom\mod_pv_db.txt`, Mtime: "2025-01-02T00:00:00Z"}, // path with a space
 		{Path: `C:\game\mods\a\rom\patch_pv_db.txt`, Mtime: "2025-01-03T00:00:00Z"},
 	}
-	data := BuildHeader("0.9", stamps)
-	version, got, ok := ParseHeader(data)
+	var buf bytes.Buffer
+	if err := BuildHeader(&buf, "0.9", stamps); err != nil {
+		t.Fatal(err)
+	}
+	version, got, ok := ParseHeader(buf.Bytes())
 	if !ok || version != "0.9" || len(got) != len(stamps) {
 		t.Fatalf("ParseHeader = %q, %v, %v", version, got, ok)
 	}
@@ -57,8 +65,11 @@ func TestParseHeaderMalformed(t *testing.T) {
 func TestParseFileIgnoresHeader(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "mod_pv_db.txt")
-	data := BuildHeader("1.0", []SourceStamp{{Path: "x", Mtime: "2025-01-01T00:00:00Z"}})
-	data = append(data, []byte("pv_1.bpm=120\r\n")...)
+	var buf bytes.Buffer
+	if err := BuildHeader(&buf, "1.0", []SourceStamp{{Path: "x", Mtime: "2025-01-01T00:00:00Z"}}); err != nil {
+		t.Fatal(err)
+	}
+	data := append(buf.Bytes(), []byte("pv_1.bpm=120\r\n")...)
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
