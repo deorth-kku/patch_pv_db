@@ -39,11 +39,17 @@ func PreInit() {
 		log.Printf("%v", err)
 		return
 	}
-	modDir := filepath.Join(gameRoot, "mods", modName)
+	gameCfg, err := loadConfig(filepath.Join(gameRoot, "config.toml"))
+	if err != nil {
+		log.Printf("reading config: %v", err)
+		return
+	}
+	modsRoot := filepath.Join(gameRoot, gameCfg.Mods)
+	modDir := filepath.Join(modsRoot, modName)
 	out := filepath.Join(modDir, "rom", "mod_pv_db.txt")
 
-	cfg := loadModConfig(filepath.Join(modDir, "config.toml"))
-	s, err := run(gameRoot, out, time.Now().Format("20060102"), cfg.Version, cfg.Verbose)
+	modCfg := loadModConfig(filepath.Join(modDir, "config.toml"))
+	s, err := run(modsRoot, gameCfg.Priority, out, time.Now().Format("20060102"), modCfg.Version, modCfg.Verbose)
 	if err != nil {
 		log.Printf("%v", err)
 		return
@@ -57,7 +63,7 @@ func PreInit() {
 }
 
 // findGameRoot walks up from the game executable's directory and returns
-// the first directory that contains a mods subdirectory.
+// the first directory that contains a config.toml file.
 func findGameRoot() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -65,12 +71,12 @@ func findGameRoot() (string, error) {
 	}
 	dir := filepath.Dir(exe)
 	for {
-		if fi, err := os.Stat(filepath.Join(dir, "mods")); err == nil && fi.IsDir() {
+		if fi, err := os.Stat(filepath.Join(dir, "config.toml")); err == nil && !fi.IsDir() {
 			return dir, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", fmt.Errorf("game root not found above %s", exe)
+			return "", fmt.Errorf("game config.toml not found above %s", exe)
 		}
 		dir = parent
 	}

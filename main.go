@@ -39,23 +39,19 @@ type summary struct {
 	skipped  bool
 }
 
-// run performs the full merge of the game's mods and writes the result to
-// out. The mod whose tree contains out is not scanned as a source.
+// run performs the full merge of the mods under modsRoot (scanned in
+// priority order) and writes the result to out. The mod whose tree
+// contains out is not scanned as a source.
 //
 // When version is non-empty and the existing out file carries a header
 // generated from the same version and the same source files (same paths,
 // modification times and order), regeneration is skipped.
-func run(game, out, date, version string, verbose bool) (summary, error) {
+func run(modsRoot string, priority []string, out, date, version string, verbose bool) (summary, error) {
 	var s summary
 
-	cfg, err := loadConfig(filepath.Join(game, "config.toml"))
-	if err != nil {
-		return s, fmt.Errorf("reading config: %w", err)
-	}
-	modsRoot := filepath.Join(game, cfg.Mods)
 	excluded := excludedMod(out, modsRoot)
 
-	srcFiles, patchFiles := collect(modsRoot, cfg.Priority, excluded, verbose)
+	srcFiles, patchFiles := collect(modsRoot, priority, excluded, verbose)
 	s.sources, s.patches = len(srcFiles), len(patchFiles)
 	if verbose {
 		log.Printf("scanned %d mod_pv_db files, %d patch_pv_db files", s.sources, s.patches)
