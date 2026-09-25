@@ -26,7 +26,7 @@ func TestApplyPatches(t *testing.T) {
 	if _, ok := db["pv_9"]; ok {
 		t.Error("pv_9 must not be created by patch")
 	}
-	if !patched["pv_1"] {
+	if _, ok := patched["pv_1"]; !ok {
 		t.Error("pv_1 must be marked patched")
 	}
 	if len(patched) != 1 {
@@ -61,7 +61,7 @@ func TestApplyPatchesAnotherSong(t *testing.T) {
 			t.Errorf("%s = %q, want %q", k, keys[k], v)
 		}
 	}
-	if !patched["pv_1"] {
+	if _, ok := patched["pv_1"]; !ok {
 		t.Error("pv_1 must be marked patched")
 	}
 }
@@ -165,7 +165,7 @@ func TestApplyPatchesSongFileDedup(t *testing.T) {
 	if got := keys["another_song.1.vocal_disp_name"]; got != "Miku" {
 		t.Errorf("another_song.1.vocal_disp_name = %q, want %q", got, "Miku")
 	}
-	if !patched["pv_1"] {
+	if _, ok := patched["pv_1"]; !ok {
 		t.Error("pv_1 must be marked patched")
 	}
 }

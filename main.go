@@ -157,12 +157,15 @@ type sourceFile struct {
 // in the priority list (deduplicated, first occurrence wins), skipping the
 // excluded mod, and records each file's modification time.
 func collect(modsRoot string, priority []string, excluded string, verbose bool) (sources, patches []sourceFile) {
-	seen := map[string]bool{}
+	seen := pvdb.StringSet{}
 	for _, name := range priority {
-		if name == "" || seen[name] {
+		if name == "" {
 			continue
 		}
-		seen[name] = true
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
 		if name == excluded {
 			if verbose {
 				log.Printf("skip mod %s (contains output file)", name)

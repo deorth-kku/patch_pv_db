@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// StringSet is a set of strings.
+type StringSet map[string]struct{}
+
 // Source is one parsed mod_pv_db.txt (or patch_pv_db.txt) file.
 type Source struct {
 	// Name is the mod folder name this source was loaded from.

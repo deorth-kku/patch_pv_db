@@ -13,7 +13,7 @@ func TestRender(t *testing.T) {
 		"pv_600":  {Base: map[string]string{"bpm": "4"}}, // single source but patched
 	}
 	sourceCount := map[string]int{"pv_999": 2, "pv_1000": 2, "pv_500": 1, "pv_600": 1}
-	patched := map[string]bool{"pv_600": true}
+	patched := StringSet{"pv_600": {}}
 
 	data, n := Render(db, sourceCount, patched, "20260101")
 	if n != 3 {

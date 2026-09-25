@@ -14,10 +14,10 @@ import (
 // fields within a pv in lexicographic order, one blank line between pv
 // blocks, CRLF line endings, and a single trailing CRLF.
 // The second return value is the number of rendered pv ids.
-func Render(db map[string]*PV, sourceCount map[string]int, patched map[string]bool, date string) ([]byte, int) {
+func Render(db map[string]*PV, sourceCount map[string]int, patched StringSet, date string) ([]byte, int) {
 	ids := make([]string, 0, len(sourceCount))
 	for id, count := range sourceCount {
-		if count >= 2 || patched[id] {
+		if _, isPatched := patched[id]; count >= 2 || isPatched {
 			ids = append(ids, id)
 		}
 	}

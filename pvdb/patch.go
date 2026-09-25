@@ -13,11 +13,11 @@ package pvdb
 //
 // The returned set contains the pv ids that were touched by at least one
 // patch key.
-func ApplyPatches(db map[string]*PV, patches []Source) map[string]bool {
-	patched := map[string]bool{}
-	patchedBase := map[string]map[string]bool{}
-	patchedSong0 := map[string]map[string]bool{}
-	patchedSongs := map[string]map[string]map[string]bool{}
+func ApplyPatches(db map[string]*PV, patches []Source) StringSet {
+	patched := StringSet{}
+	patchedBase := map[string]StringSet{}
+	patchedSong0 := map[string]StringSet{}
+	patchedSongs := map[string]map[string]StringSet{}
 
 	for _, src := range patches {
 		for pvID, fields := range src.PVs {
@@ -26,21 +26,21 @@ func ApplyPatches(db map[string]*PV, patches []Source) map[string]bool {
 				continue
 			}
 			if patchedBase[pvID] == nil {
-				patchedBase[pvID] = map[string]bool{}
+				patchedBase[pvID] = StringSet{}
 			}
 			if patchedSong0[pvID] == nil {
-				patchedSong0[pvID] = map[string]bool{}
+				patchedSong0[pvID] = StringSet{}
 			}
 			if patchedSongs[pvID] == nil {
-				patchedSongs[pvID] = map[string]map[string]bool{}
+				patchedSongs[pvID] = map[string]StringSet{}
 			}
 
 			regular, songs := splitFields(fields)
 			touched := false
 			for field, value := range regular {
-				if !patchedBase[pvID][field] {
+				if _, ok := patchedBase[pvID][field]; !ok {
 					state.Base[field] = value
-					patchedBase[pvID][field] = true
+					patchedBase[pvID][field] = struct{}{}
 					touched = true
 				}
 			}
@@ -50,9 +50,9 @@ func ApplyPatches(db map[string]*PV, patches []Source) map[string]bool {
 						if rest == "name" {
 							value = state.song0NameValue(value)
 						}
-						if !patchedSong0[pvID][rest] {
+						if _, ok := patchedSong0[pvID][rest]; !ok {
 							state.setSong0(rest, value)
-							patchedSong0[pvID][rest] = true
+							patchedSong0[pvID][rest] = struct{}{}
 							touched = true
 						}
 					}
@@ -63,12 +63,12 @@ func ApplyPatches(db map[string]*PV, patches []Source) map[string]bool {
 						for _, existing := range state.Songs {
 							if existing["song_file_name"] == sfname {
 								if patchedSongs[pvID][sfname] == nil {
-									patchedSongs[pvID][sfname] = map[string]bool{}
+									patchedSongs[pvID][sfname] = StringSet{}
 								}
 								for k, v := range entry.fields {
-									if !patchedSongs[pvID][sfname][k] {
+									if _, ok := patchedSongs[pvID][sfname][k]; !ok {
 										existing[k] = v
-										patchedSongs[pvID][sfname][k] = true
+										patchedSongs[pvID][sfname][k] = struct{}{}
 										touched = true
 									}
 								}
@@ -87,7 +87,7 @@ func ApplyPatches(db map[string]*PV, patches []Source) map[string]bool {
 				}
 			}
 			if touched {
-				patched[pvID] = true
+				patched[pvID] = struct{}{}
 			}
 		}
 	}
