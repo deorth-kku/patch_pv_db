@@ -7,6 +7,18 @@ import (
 	"sort"
 )
 
+// IncludedPVs returns the set of pv ids that Render includes: those present
+// in at least two sources, or touched by a patch.
+func IncludedPVs(sourceCount map[string]int, patched StringSet) StringSet {
+	set := StringSet{}
+	for id, count := range sourceCount {
+		if _, isPatched := patched[id]; count >= 2 || isPatched {
+			set[id] = struct{}{}
+		}
+	}
+	return set
+}
+
 // Render renders the merged db to the output format and writes it to w.
 //
 // Only pv ids with sourceCount >= 2, or that were touched by a patch,
@@ -18,11 +30,10 @@ import (
 // The count is the number of fully rendered pv ids; it is partial when
 // the returned error is non-nil.
 func Render(w io.Writer, db map[string]*PV, sourceCount map[string]int, patched StringSet, date string) (int, error) {
-	ids := make([]string, 0, len(sourceCount))
-	for id, count := range sourceCount {
-		if _, isPatched := patched[id]; count >= 2 || isPatched {
-			ids = append(ids, id)
-		}
+	included := IncludedPVs(sourceCount, patched)
+	ids := make([]string, 0, len(included))
+	for id := range included {
+		ids = append(ids, id)
 	}
 	slices.Sort(ids)
 

@@ -36,6 +36,7 @@ type summary struct {
 	merged   int
 	patched  int
 	rendered int
+	fields   int
 	skipped  bool
 }
 
@@ -51,19 +52,20 @@ func run(modsRoot string, priority []string, out, date, version string, verbose 
 
 	excluded := excludedMod(out, modsRoot)
 
-	srcFiles, patchFiles := collect(modsRoot, priority, excluded, verbose)
+	srcFiles, patchFiles, fieldFiles := collect(modsRoot, priority, excluded, verbose)
 	s.sources, s.patches = len(srcFiles), len(patchFiles)
 	if verbose {
-		log.Printf("scanned %d mod_pv_db files, %d patch_pv_db files", s.sources, s.patches)
+		log.Printf("scanned %d mod_pv_db files, %d patch_pv_db files, %d mod_pv_field files",
+			s.sources, s.patches, len(fieldFiles))
 	}
 
-	stamps := stampsOf(srcFiles, patchFiles)
+	stamps := stampsOf(srcFiles, patchFiles, fieldFiles)
 	if upToDate(out, version, stamps) {
 		s.skipped = true
 		return s, nil
 	}
 
-	sources, patches := parseSources(srcFiles, patchFiles, verbose)
+	sources, patches, fieldSources := parseSources(srcFiles, patchFiles, fieldFiles, verbose)
 
 	db, sourceCount := pvdb.Merge(sources)
 	s.merged = len(sourceCount)
@@ -124,6 +126,36 @@ func run(modsRoot string, priority []string, out, date, version string, verbose 
 		return s, fmt.Errorf("writing output: %w", err)
 	}
 	tmpName = ""
+
+	// Write the companion mod_pv_field.txt alongside out: for every pv in
+	// the rendered db, the field entries copied (first-wins per key, in
+	// priority order) from the source mods' mod_pv_field.txt files. The
+	// same temp-file/rename cleanup as above applies via tmpName.
+	fieldOut := filepath.Join(filepath.Dir(out), "mod_pv_field.txt")
+	fieldTmp, err := os.CreateTemp(filepath.Dir(out), filepath.Base(fieldOut)+".tmp-*")
+	if err != nil {
+		return s, fmt.Errorf("creating temp field output: %w", err)
+	}
+	tmpName = fieldTmp.Name()
+	wf := bufio.NewWriter(fieldTmp)
+	pvSet := pvdb.IncludedPVs(sourceCount, patched)
+	fieldDB := pvdb.MergeFields(fieldSources)
+	if s.fields, err = pvdb.RenderFields(wf, fieldDB, pvSet); err != nil {
+		fieldTmp.Close()
+		return s, fmt.Errorf("writing field output: %w", err)
+	}
+	if err := wf.Flush(); err != nil {
+		fieldTmp.Close()
+		return s, fmt.Errorf("writing field output: %w", err)
+	}
+	if err := fieldTmp.Close(); err != nil {
+		return s, fmt.Errorf("writing field output: %w", err)
+	}
+	if err := os.Rename(tmpName, fieldOut); err != nil {
+		return s, fmt.Errorf("writing field output: %w", err)
+	}
+	tmpName = ""
+
 	if verbose {
 		for id := range patched {
 			log.Printf("patched: %s", id)
@@ -173,10 +205,11 @@ type sourceFile struct {
 	mtime string
 }
 
-// collect lists the mod_pv_db.txt and patch_pv_db.txt files of every mod
-// in the priority list (deduplicated, first occurrence wins), skipping the
-// excluded mod, and records each file's modification time.
-func collect(modsRoot string, priority []string, excluded string, verbose bool) (sources, patches []sourceFile) {
+// collect lists the mod_pv_db.txt, patch_pv_db.txt and mod_pv_field.txt
+// files of every mod in the priority list (deduplicated, first occurrence
+// wins), skipping the excluded mod, and records each file's modification
+// time.
+func collect(modsRoot string, priority []string, excluded string, verbose bool) (sources, patches, fieldFiles []sourceFile) {
 	seen := pvdb.StringSet{}
 	for _, name := range priority {
 		if name == "" {
@@ -205,8 +238,13 @@ func collect(modsRoot string, priority []string, excluded string, verbose bool) 
 			f.name = name
 			patches = append(patches, f)
 		}
+
+		if f, ok := scanFile(dir, "mod_pv_field.txt"); ok {
+			f.name = name
+			fieldFiles = append(fieldFiles, f)
+		}
 	}
-	return sources, patches
+	return sources, patches, fieldFiles
 }
 
 // scanFile stats dir/rom/file and returns it with its modification time.
@@ -221,7 +259,7 @@ func scanFile(dir, file string) (sourceFile, bool) {
 
 // parseSources parses the scanned files, skipping any file that cannot be
 // parsed.
-func parseSources(srcFiles, patchFiles []sourceFile, verbose bool) (sources, patches []pvdb.Source) {
+func parseSources(srcFiles, patchFiles, fieldFiles []sourceFile, verbose bool) (sources, patches, fieldSources []pvdb.Source) {
 	for _, f := range srcFiles {
 		src, err := pvdb.ParseFile(f.path)
 		if err != nil {
@@ -247,17 +285,34 @@ func parseSources(srcFiles, patchFiles []sourceFile, verbose bool) (sources, pat
 			log.Printf("patch %-39s %d pv", f.name, len(psrc.PVs))
 		}
 	}
-	return sources, patches
+	for _, f := range fieldFiles {
+		fsrc, err := pvdb.ParseFile(f.path)
+		if err != nil {
+			if verbose {
+				log.Printf("skip mod %s field: %v", f.name, err)
+			}
+			continue
+		}
+		fsrc.Name = f.name
+		fieldSources = append(fieldSources, fsrc)
+		if verbose {
+			log.Printf("field %-39s %d pv", f.name, len(fsrc.PVs))
+		}
+	}
+	return sources, patches, fieldSources
 }
 
-// stampsOf records the scanned files (sources first, then patches) in
-// input order for the output header and the up-to-date check.
-func stampsOf(srcFiles, patchFiles []sourceFile) []pvdb.SourceStamp {
-	stamps := make([]pvdb.SourceStamp, 0, len(srcFiles)+len(patchFiles))
+// stampsOf records the scanned files (sources, then patches, then field
+// files) in input order for the output header and the up-to-date check.
+func stampsOf(srcFiles, patchFiles, fieldFiles []sourceFile) []pvdb.SourceStamp {
+	stamps := make([]pvdb.SourceStamp, 0, len(srcFiles)+len(patchFiles)+len(fieldFiles))
 	for _, f := range srcFiles {
 		stamps = append(stamps, pvdb.SourceStamp{Path: f.path, Mtime: f.mtime})
 	}
 	for _, f := range patchFiles {
+		stamps = append(stamps, pvdb.SourceStamp{Path: f.path, Mtime: f.mtime})
+	}
+	for _, f := range fieldFiles {
 		stamps = append(stamps, pvdb.SourceStamp{Path: f.path, Mtime: f.mtime})
 	}
 	return stamps

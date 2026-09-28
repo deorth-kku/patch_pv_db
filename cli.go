@@ -40,6 +40,6 @@ func main() {
 		fmt.Printf("up to date, skipped -> %s\n", *out)
 		return
 	}
-	fmt.Printf("merged %d pv from %d mods, patched %d, rendered %d -> %s\n",
-		s.merged, s.sources, s.patched, s.rendered, *out)
+	fmt.Printf("merged %d pv from %d mods, patched %d, rendered %d, fields %d -> %s\n",
+		s.merged, s.sources, s.patched, s.rendered, s.fields, *out)
 }
