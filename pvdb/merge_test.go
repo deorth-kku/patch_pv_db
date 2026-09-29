@@ -230,3 +230,79 @@ func TestMergeSongFileNoSfnameAppends(t *testing.T) {
 		t.Errorf("another_song.length = %q, want %q (no sfname)", got, "2")
 	}
 }
+
+func TestMergeEmptyLanguageValueDoesNotBlock(t *testing.T) {
+	a := src(map[string]map[string]string{
+		"pv_1": {
+			"another_song.0.name":    "A0",
+			"another_song.0.name_en": "",
+		},
+	})
+	b := src(map[string]map[string]string{
+		"pv_1": {"another_song.0.name_en": "A0 English"},
+	})
+
+	db, _ := Merge([]Source{a, b})
+	keys := db["pv_1"].renderKeys("20260101")
+
+	if got := keys["another_song.0.name_en"]; got != "A0 English" {
+		t.Errorf("another_song.0.name_en = %q, want %q (empty upstream value must not block)", got, "A0 English")
+	}
+}
+
+func TestMergeSongNameInheritedFromEntry0(t *testing.T) {
+	a := src(map[string]map[string]string{
+		"pv_1": {"another_song.0.name": "Base"},
+	})
+	b := src(map[string]map[string]string{
+		"pv_1": {
+			"another_song.1.name":           "",
+			"another_song.1.song_file_name": "rom/sound/song/pv_1b.ogg",
+		},
+	})
+
+	db, _ := Merge([]Source{a, b})
+	keys := db["pv_1"].renderKeys("20260101")
+
+	if got := keys["another_song.1.name"]; got != "Base" {
+		t.Errorf("another_song.1.name = %q, want %q (inherited from entry 0)", got, "Base")
+	}
+}
+
+func TestMergeSongNameMissingWithoutEntry0Name(t *testing.T) {
+	a := src(map[string]map[string]string{
+		"pv_1": {
+			"another_song.1.name":           "",
+			"another_song.1.song_file_name": "rom/sound/song/pv_1b.ogg",
+		},
+	})
+
+	db, _ := Merge([]Source{a})
+	keys := db["pv_1"].renderKeys("20260101")
+
+	if got := keys["another_song.1.name"]; got != "" {
+		t.Errorf("another_song.1.name = %q, want %q (no entry-0 name to inherit)", got, "")
+	}
+}
+
+func TestMergeEmptyNonLanguageValueKept(t *testing.T) {
+	// song_file_name is not a language field: an empty value is kept in the
+	// entry (unlike an empty name_ value, which is dropped). Source a's
+	// entry is renumbered to index 0 and must retain the empty value.
+	a := src(map[string]map[string]string{
+		"pv_1": {
+			"another_song.1.name":           "A",
+			"another_song.1.song_file_name": "",
+		},
+	})
+	b := src(map[string]map[string]string{
+		"pv_1": {"another_song.1.song_file_name": "rom/sound/song/pv_1b.ogg"},
+	})
+
+	db, _ := Merge([]Source{a, b})
+	keys := db["pv_1"].renderKeys("20260101")
+
+	if got := keys["another_song.0.song_file_name"]; got != "" {
+		t.Errorf("another_song.0.song_file_name = %q, want %q (empty non-language value must be kept)", got, "")
+	}
+}

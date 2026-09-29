@@ -13,8 +13,10 @@ const maxLineSize = 1024 * 1024
 // ParseFile parses a mod_pv_db.txt style file: lines of "key=value"
 // separated by the first '='. Empty lines are skipped, a UTF-8 BOM is
 // stripped, and both CRLF and LF line endings are accepted. Values are
-// kept byte-for-byte (they may contain '=' or be empty). The file is
-// read line by line, so memory use stays flat for very large files.
+// kept byte-for-byte (they may contain '=' or be empty); merge-level
+// rules (e.g. skipping empty language fields) are applied later in
+// splitFields. The file is read line by line, so memory use stays flat
+// for very large files.
 func ParseFile(path string) (Source, error) {
 	f, err := os.Open(path)
 	if err != nil {

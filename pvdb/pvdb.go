@@ -62,6 +62,20 @@ const songPrefix = "another_song."
 // songLengthKey is the recomputed length field.
 const songLengthKey = songPrefix + "length"
 
+// isLangField reports whether a field name is a language variant of the
+// name field, e.g. "name_en", "name_en2", "name_cn", "name_ro". Only
+// "name_*" fields are optional: a source that provides an empty value for
+// one is treated as not providing it at all (see splitFields). Other
+// underscore fields (song_file_name, hidden_timing, ...) are regular
+// fields and keep their empty values.
+func isLangField(field string) bool {
+	name, lang, ok := strings.Cut(field, "_")
+	if !ok || name != "name" {
+		return false
+	}
+	return len(lang) <= 3
+}
+
 // songKey splits a field key like "another_song.1.name" into the entry
 // index and the remaining field name. ok is false for non-entry keys
 // such as "another_song.length" and for keys outside another_song.
@@ -137,13 +151,19 @@ type songEntry struct {
 }
 
 // splitFields separates the field map of one pv into regular fields and
-// another_song entries grouped by entry index, sorted by index.
+// another_song entries grouped by entry index, sorted by index. Empty
+// values of language fields (e.g. name_en, name_cn, name_ro) are dropped:
+// they are optional, must not appear in the merge result, and must not
+// block a value from a later source.
 func splitFields(fields map[string]string) (regular map[string]string, songs []songEntry) {
 	regular = map[string]string{}
 	byIdx := map[int]map[string]string{}
 	var idxs []int
 	for field, value := range fields {
 		if idx, rest, ok := songKey(field); ok {
+			if value == "" && isLangField(rest) {
+				continue // empty language item: treated as not provided
+			}
 			m, exists := byIdx[idx]
 			if !exists {
 				m = map[string]string{}
@@ -152,6 +172,9 @@ func splitFields(fields map[string]string) (regular map[string]string, songs []s
 			}
 			m[rest] = value
 		} else {
+			if value == "" && isLangField(field) {
+				continue // empty language item: treated as not provided
+			}
 			regular[field] = value
 		}
 	}
@@ -163,7 +186,9 @@ func splitFields(fields map[string]string) (regular map[string]string, songs []s
 }
 
 // renderKeys returns the final field map of a PV for output: base fields,
-// renumbered another_song entries and the recomputed length.
+// renumbered another_song entries and the recomputed length. The "name"
+// field is mandatory for every entry: an entry without one inherits the
+// name of the shared index-0 entry.
 func (p *PV) renderKeys(date string) map[string]string {
 	keys := map[string]string{}
 	for k, v := range p.Base {
@@ -173,9 +198,18 @@ func (p *PV) renderKeys(date string) map[string]string {
 		keys[k] = v
 	}
 	entries := p.songEntries()
+	var name0 string
+	if len(entries) > 0 {
+		name0 = entries[0]["name"]
+	}
 	for idx, entry := range entries {
 		for rest, v := range entry {
 			keys[fmt.Sprintf("%s%d.%s", songPrefix, idx, rest)] = v
+		}
+		if idx > 0 && entry["name"] == "" && name0 != "" {
+			// Inherit at render time only; the stored entry maps are
+			// left untouched (renderKeys must not mutate PV state).
+			keys[fmt.Sprintf("%s%d.%s", songPrefix, idx, "name")] = name0
 		}
 	}
 	if len(entries) > 0 {

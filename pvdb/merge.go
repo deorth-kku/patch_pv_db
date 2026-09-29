@@ -3,6 +3,11 @@ package pvdb
 // Merge merges sources in priority order: earlier sources win every
 // key conflict (the original date fields are ignored).
 //
+// Language fields (name_en, name_en2, name_cn, name_ro, ...) are
+// optional: a source providing an empty value for one is treated as not
+// providing it, so the value can neither appear in the result nor block
+// a value from a later source.
+//
 // another_song fields are accumulated instead of overridden: the shared
 // index-0 entry is merged field by field (earlier source wins), and
 // entries with index >= 1 are appended in priority order and renumbered
