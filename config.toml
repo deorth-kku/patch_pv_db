@@ -1,0 +1,9 @@
+enabled = true
+name = "Patch PV DB"
+author = "deorth"
+version = "0.0.1"
+description = ""
+dll = ["patch_pv_db.dll"]
+include = ["."]
+
+verbose = false
